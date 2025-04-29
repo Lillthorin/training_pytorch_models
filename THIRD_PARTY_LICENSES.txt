@@ -1,0 +1,15 @@
+This project uses the following third-party libraries:
+
+- torch (BSD-3-Clause License)
+- torchvision (BSD-3-Clause License)
+- albumentations (Apache License 2.0)
+- pandas (BSD-3-Clause License)
+- pycocotools (BSD-2-Clause License)
+- Pillow (HPND License)
+- tqdm (Mozilla Public License 2.0)
+- matplotlib (PSF License)
+- scikit-learn (BSD-3-Clause License)
+- seaborn (BSD-3-Clause License)
+
+Each library is subject to its own licensing terms.
+Copies of their licenses can be found in their respective repositories.
