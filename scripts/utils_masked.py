@@ -1,4 +1,6 @@
 # utils.py
+from matplotlib.patches import Rectangle
+from torchvision.utils import draw_segmentation_masks
 import os
 import matplotlib.pyplot as plt
 import seaborn as sns
@@ -14,6 +16,8 @@ import random
 from torchvision.transforms import functional as F
 import math
 from tqdm import tqdm
+from torchvision.utils import draw_segmentation_masks, draw_bounding_boxes
+from torchvision.transforms.functional import to_pil_image
 
 import torchvision
 
@@ -104,31 +108,67 @@ def denormalize(img_tensor):
     return img_tensor * std + mean
 
 
-def visualize_labels(train_loader, epoch, SAVE_PATH):
-    save_dir = os.path.join(SAVE_PATH, "train_labels")
+# Enkel färgpalett med fasta färger för klass-ID
+
+
+def visualize_labels(train_loader, epoch, SAVE_PATH, num_images=4, save_path="train_labels"):
+    save_dir = os.path.join(SAVE_PATH, save_path)
     os.makedirs(save_dir, exist_ok=True)
-    imgs, targets = next(iter(train_loader))
-    imgs = imgs[:4]
-    targets = targets[:4]
+
+    all_batches = list(train_loader)
+    batch_imgs, batch_targets = random.choice(all_batches)
+
+    batch_size = len(batch_imgs)
+    num_images = min(num_images, batch_size)
+    selected_indices = random.sample(range(batch_size), num_images)
+
+    imgs = [batch_imgs[i] for i in selected_indices]
+    targets = [batch_targets[i] for i in selected_indices]
+
     cols = 2
-    rows = 2
-    fig, axs = plt.subplots(rows, cols, figsize=(6*cols, 6*rows))
-    axs = axs.flatten()
-    for i, (img, target) in enumerate(zip(imgs, targets)):
-        img = img.cpu()
-        # Hantera grayscale eller RGB
+    rows = math.ceil(num_images / cols)
+    fig, axs = plt.subplots(rows, cols, figsize=(6 * cols, 6 * rows))
+    axs = axs.flatten() if isinstance(axs, np.ndarray) else [axs]
+
+    for i in range(num_images):
+        img = imgs[i].cpu()
+        target = targets[i]
+
+        # Denormalisera + omvandla till numpy
         if img.shape[0] == 1:
             img_np = img.squeeze(0).numpy()
             axs[i].imshow(img_np, cmap='gray')
         else:
-            img = denormalize(img).clamp(0, 1)  # 💥 Denormalisera här också
+            img = denormalize(img).clamp(0, 1)
             img_np = img.permute(1, 2, 0).numpy()
             axs[i].imshow(img_np)
-        for box in target['boxes']:
+
+        axs[i].set_title(f"Train Labels {i+1}")
+        axs[i].axis("off")
+
+        # Rita segmenteringsmasker i rött
+        if "masks" in target:
+            masks = target["masks"]
+            for mask in masks:
+                mask = mask.cpu().numpy()
+                red_mask = np.zeros((*mask.shape, 3))
+                red_mask[..., 0] = mask  # Röd kanal
+                axs[i].imshow(red_mask, alpha=0.4)
+
+        # Rita bboxar + klass-ID
+        for box, label in zip(target["boxes"], target["labels"]):
             x1, y1, x2, y2 = box.cpu().numpy()
-            axs[i].add_patch(plt.Rectangle(
-                (x1, y1), x2-x1, y2-y1, edgecolor='blue', facecolor='none', linewidth=2))
-        axs[i].axis('off')
+            axs[i].add_patch(Rectangle(
+                (x1, y1), x2 - x1, y2 - y1,
+                edgecolor='blue', facecolor='none', linewidth=2
+            ))
+            axs[i].text(x1, y1 - 5, f"ID {int(label)}",
+                        color="blue", fontsize=10)
+
+    # Töm överflödiga rutor
+    for j in range(num_images, len(axs)):
+        axs[j].axis("off")
+
     plt.tight_layout()
     plt.savefig(os.path.join(save_dir, f"{epoch}_train_labels.png"))
     plt.close()
