@@ -96,7 +96,9 @@ Use this to track how your modell is doing:
 ![best_val_labels](https://github.com/user-attachments/assets/1d5d19aa-9fee-4175-b109-7c659d15fce6)
 
 
-After the training has been completed a metrics grid will be created. THIS CHANGES BETWEEN maskrcnn modell and the rest:
+After the training has been completed a metrics grid will be created. THIS CHANGES BETWEEN maskrcnn model and others:
+
+
 ![all_metrics_grid](https://github.com/user-attachments/assets/17e8ddc1-e3ea-47b4-878f-c5ed2ab6e091)
 
 
