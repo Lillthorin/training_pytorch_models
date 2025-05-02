@@ -100,9 +100,10 @@ After the training has been completed a metrics grid will be created. THIS CHANG
 ![all_metrics_grid](https://github.com/user-attachments/assets/17e8ddc1-e3ea-47b4-878f-c5ed2ab6e091)
 
 
-A confusion matrix is created as well. In the example below only one class (NUM_CLASSES=2) was used so the confusion matrix isnt valid:
+A confusion matrix is created as well. In the example below maskrcnn was trained with 4 classes (NUM_CLASSES = 5):
 
-![confusion_matrix_best](https://github.com/user-attachments/assets/40ddd200-33d9-41db-a395-4f3d44352840)
+![confusion_matrix_best](https://github.com/user-attachments/assets/54072a80-fed8-4be8-81b7-69d5f7a295db)
+
 
 
 
