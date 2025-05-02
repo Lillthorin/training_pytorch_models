@@ -79,3 +79,31 @@ DATA_DIR="" in this example should be set to DATA_DIR="path-to/dataset"
 
 ![dataset_structure](https://github.com/user-attachments/assets/62ce90c6-bcc8-4412-ac90-3f4de05d7cfe)
 
+### Outputs
+
+During training a main folder will be created "runs" under this a subfolder with the current model name will be creating. Inside this folder every run will be listed as 1, 2, 3... 
+
+To give the user some useful information a few outputs are created during the training: 
+
+Under train_labels you can see how the images and labels are sent to the model, every time augmentation is changed 2 new images are created to illustrate how augmentation is applied and sent to the model:
+
+![train_labels](https://github.com/user-attachments/assets/e12866a7-01c2-4f72-b4bc-d45d5fe9e13b)
+
+Under the folder val you can see the validation from the 'best' model and the 'last' model. This is split into two images, one with labels and one with prediction.
+Use this to track how your modell is doing: 
+![best_val_pred](https://github.com/user-attachments/assets/49ac909f-e07c-494e-9d00-ad9c315aefd6)
+![best_val_labels](https://github.com/user-attachments/assets/1d5d19aa-9fee-4175-b109-7c659d15fce6)
+
+
+After the training has been completed a metrics grid will be created. THIS CHANGES BETWEEN maskrcnn modell and the rest:
+![all_metrics_grid](https://github.com/user-attachments/assets/17e8ddc1-e3ea-47b4-878f-c5ed2ab6e091)
+
+
+A confusion matrix is created as well. In the example below only one class (NUM_CLASSES=2) was used so the confusion matrix isnt valid:
+
+![confusion_matrix_best](https://github.com/user-attachments/assets/40ddd200-33d9-41db-a395-4f3d44352840)
+
+
+
+
+
