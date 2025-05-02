@@ -59,8 +59,8 @@ categories":[{"id":0,"name":"bkgd","supercategory":"none"}, {"id":0,"name":"YOUR
     OPTIMIZER_NAME: str = 'adamw' <---- Supported optimizer: sgd, adam, adamw: DEFAULT == adamw
     PRETRAINED_BACKBONE: bool = True <--- This applies a pretrained backbone to the model, if changed you are on your own. 
     SCHEDULER_NAME: str = 'reduceonplateau' <---Supported schedulers: steplr, cosine, onecycle, reduceonplateau(mAP)" "DEFAULT == reduceonplateau
-    PATIENCE: int = 10
-    RESUME_TRAINING: bool = False
+    PATIENCE: int = 10  <--- Patience set for early stopping trigger (mAP)
+    RESUME_TRAINING: bool = False <---- To resume training on a model set RESUME_TRAINING to True and apply checkpoint path to checkpoint_best.pth or checkpoint_last.pth
     CHECKPOINT_PATH: str = ''
     EXPORT_TORCHSCRIPT: bool = False
     WARMUP_EPOCHS: int = 3
