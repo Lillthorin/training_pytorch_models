@@ -9,6 +9,11 @@ Major parts of this code were generated or co-written with the help of ChatGPT a
 It works for me – if it works for you too, great! If not, you're on your own. 😉 
 I simply wanted to share this setup as it was tough for me to find something similar when first starting with Pytorch.
 
+This setup was created with Python 3.10. Use requirements.txt to install used packages. This requirements.txt does not apply when using GPU.
+Torch and Torchvision needs to be installed seperatly with GPU support in order to access the GPU. 
+For Collab use requirements_collab.txt
+
+
 ## License
 
 This project is licensed under the MIT License. See [LICENSE.txt](./LICENSE.txt) for full details.
