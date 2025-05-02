@@ -153,7 +153,7 @@ def visualize_labels(train_loader, epoch, SAVE_PATH, num_images=4, save_path="tr
                 mask = mask.cpu().numpy()
                 red_mask = np.zeros((*mask.shape, 3))
                 red_mask[..., 0] = mask  # Röd kanal
-                axs[i].imshow(red_mask, alpha=0.4)
+                axs[i].imshow(red_mask, alpha=0.2)
 
         # Rita bboxar + klass-ID
         for box, label in zip(target["boxes"], target["labels"]):
