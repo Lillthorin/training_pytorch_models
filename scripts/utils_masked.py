@@ -134,7 +134,7 @@ def visualize_labels(train_loader, epoch, SAVE_PATH, num_images=4, save_path="tr
         img = imgs[i].cpu()
         target = targets[i]
 
-        # Denormalisera + omvandla till numpy
+        # Denormalisera
         if img.shape[0] == 1:
             img_np = img.squeeze(0).numpy()
             axs[i].imshow(img_np, cmap='gray')
@@ -146,16 +146,17 @@ def visualize_labels(train_loader, epoch, SAVE_PATH, num_images=4, save_path="tr
         axs[i].set_title(f"Train Labels {i+1}")
         axs[i].axis("off")
 
-        # Rita segmenteringsmasker i rött
+        # Rita segmenteringsmasker (labels = grön)
         if "masks" in target:
-            masks = target["masks"]
-            for mask in masks:
-                mask = mask.cpu().numpy()
-                red_mask = np.zeros((*mask.shape, 3))
-                red_mask[..., 0] = mask  # Röd kanal
-                axs[i].imshow(red_mask, alpha=0.2)
+            masks = target["masks"].cpu()
+            for m in range(masks.shape[0]):
+                mask = masks[m][0] if masks[m].dim() == 3 else masks[m]
+                mask = mask.numpy()
+                colored_mask = np.zeros((*mask.shape, 4))
+                colored_mask[mask > 0.5] = (0, 1, 0, 0.4)  # Grön med alpha
+                axs[i].imshow(colored_mask)
 
-        # Rita bboxar + klass-ID
+        # Rita boxar och klass-ID
         for box, label in zip(target["boxes"], target["labels"]):
             x1, y1, x2, y2 = box.cpu().numpy()
             axs[i].add_patch(Rectangle(
@@ -165,7 +166,6 @@ def visualize_labels(train_loader, epoch, SAVE_PATH, num_images=4, save_path="tr
             axs[i].text(x1, y1 - 5, f"ID {int(label)}",
                         color="blue", fontsize=10)
 
-    # Töm överflödiga rutor
     for j in range(num_images, len(axs)):
         axs[j].axis("off")
 
