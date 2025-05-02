@@ -38,5 +38,6 @@ train_masked(DATA_DIR="", MODEL_NAME='ssd_mobilenetv3', BATCH_SIZE=4, EPOCHS=50,
 This training example uses coco.json annotation files to train the models. 
 The training script expects the dataset to be structured as shown below. 
 DATA_DIR="" in this example should be set to DATA_DIR="path-to/dataset"
-![Dataset structure](https://github.com/user-attachments/assets/0e38c558-965c-4b6f-99e4-f3b1e0772cfb)
+C:\Users\MathiasTorin\Desktop\klart\dataset_structure.png
+
 
