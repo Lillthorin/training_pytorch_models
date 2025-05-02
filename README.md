@@ -61,13 +61,14 @@ categories":[{"id":0,"name":"bkgd","supercategory":"none"}, {"id":0,"name":"YOUR
     SCHEDULER_NAME: str = 'reduceonplateau' <---Supported schedulers: steplr, cosine, onecycle, reduceonplateau(mAP)" "DEFAULT == reduceonplateau
     PATIENCE: int = 10  <--- Patience set for early stopping trigger (mAP)
     RESUME_TRAINING: bool = False <---- To resume training on a model set RESUME_TRAINING to True and apply checkpoint path to checkpoint_best.pth or checkpoint_last.pth
-    CHECKPOINT_PATH: str = ''
-    EXPORT_TORCHSCRIPT: bool = False
-    WARMUP_EPOCHS: int = 3
+    CHECKPOINT_PATH: str = '' <---- Path to checkpoint to resume training. 
+    EXPORT_TORCHSCRIPT: bool = False <---- DO NOT CHANGE! Working on setting this up. 
+    WARMUP_EPOCHS: int = 3  <----- Number of warmup epochs, the modell will go from 1e-6 LR up to the set LR during these epochs. 
     
 
 ### Dataset structure
 This training example uses coco.json annotation files to train the models. 
+
 The training script expects the dataset to be structured as shown below. 
 DATA_DIR="" in this example should be set to DATA_DIR="path-to/dataset"
 
