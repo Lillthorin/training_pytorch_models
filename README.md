@@ -36,7 +36,7 @@ train_masked(DATA_DIR="", BATCH_SIZE=4, EPOCHS=50, NUM_CLASSES=2, IMGSZ=640)
 WARNING: 
 NUM_CLASSES is always 1 more than your number of classes. The models counts bakground as a class. In the json file you always have to have a supercategory:
 
-categories":[{"id":0,"name":"bkgd","supercategory":"none"}, {"id":0,"name":"YOUR_FIRST_CLASS","supercategory":"bkgd"}]
+categories":[{"id":0,"name":"bkgd","supercategory":"none"}, {"id":0,"name":"YOUR_FIRST_CLASS","supercategory":"bkgd".....}]
 
 
 ### Dataset structure
