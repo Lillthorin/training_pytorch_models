@@ -21,6 +21,7 @@ This project is licensed under the MIT License. See [LICENSE.txt](./LICENSE.txt)
 **Note:**  
 This project depends on third-party libraries (such as PyTorch, torchvision, albumentations, pandas, etc.) that each have their own licenses.  
 It is your responsibility to comply with any third-party licenses if you use or distribute this project. 
+See [THIRD_PARTY_LICENSES.txt](./THIRD_PARTY_LICENSES.txt) for full details.
 
 
 
