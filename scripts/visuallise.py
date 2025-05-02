@@ -13,6 +13,7 @@ import json
 import contextlib
 import io
 import random
+from matplotlib.patches import Rectangle
 
 def create_confusion_matrix(targets, preds, class_names, SAVE_PATH, filename="confusion_matrix.png", title="Confusion Matrix", ):
     save_dir = os.path.join(SAVE_PATH, 'confusion_matrices')
@@ -188,27 +189,28 @@ def visualize_labels(train_loader, epoch, SAVE_PATH, num_images=4, save_path="tr
 
     for i in range(num_images):
         img = imgs[i].cpu()
+        target = targets[i]
 
         # Hantera grayscale eller RGB
         if img.shape[0] == 1:
             img_np = img.squeeze(0).numpy()
             axs[i].imshow(img_np, cmap='gray')
         else:
-            img = denormalize(img).clamp(0, 1)  # 💥 Denormalisera här också
+            img = denormalize(img).clamp(0, 1)
             img_np = img.permute(1, 2, 0).numpy()
             axs[i].imshow(img_np)
 
         axs[i].set_title(f"Train Labels {i+1}")
         axs[i].axis("off")
 
-        # Rita ground truth-boxar (targets)
-        box_source = targets[i]
-        for box in box_source["boxes"]:
+        # Rita bboxar och klass-ID
+        for box, label in zip(target["boxes"], target["labels"]):
             x1, y1, x2, y2 = box.cpu().numpy()
-            axs[i].add_patch(plt.Rectangle(
+            axs[i].add_patch(Rectangle(
                 (x1, y1), x2 - x1, y2 - y1,
                 edgecolor='blue', facecolor='none', linewidth=2
             ))
+            axs[i].text(x1, y1 - 5, f"ID {int(label)}", color="blue", fontsize=10)
 
     # Stäng av överflödiga rutor
     for j in range(num_images, len(axs)):
