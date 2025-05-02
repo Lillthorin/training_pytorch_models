@@ -20,6 +20,7 @@ It is your responsibility to comply with any third-party licenses if you use or 
 
 
 ## How to train a modell
+
 To start a training session on any of the supported models for object detection:
 
 from scripts.train import train
@@ -30,8 +31,12 @@ To start a training session on masked_rcnn modell use this instead:
 
 from scripts.train_mask import train as train_masked
   
-train_masked(DATA_DIR="", MODEL_NAME='ssd_mobilenetv3', BATCH_SIZE=4, EPOCHS=50, NUM_CLASSES=2, IMGSZ=640)
+train_masked(DATA_DIR="", BATCH_SIZE=4, EPOCHS=50, NUM_CLASSES=2, IMGSZ=640)
 
+WARNING: 
+NUM_CLASSES is always 1 more than your number of classes. The models counts bakground as a class. In the json file you always have to have a supercategory:
+
+categories":[{"id":0,"name":"bkgd","supercategory":"none"}, {"id":0,"name":"YOUR_FIRST_CLASS","supercategory":"bkgd"}]
 
 
 ### Dataset structure
