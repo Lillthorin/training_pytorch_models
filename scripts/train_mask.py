@@ -112,11 +112,15 @@ def train(
                     print("🔄 Switching to weak augmentation")
                     train_dataset.transforms = get_weak_train_transform(
                         imgsz=IMGSZ)
+                    visualize_labels(train_loader, epoch, num_images=4,
+                                 save_path="train_labels", SAVE_PATH=SAVE_PATH)
             elif epoch + 1 == int((EPOCHS + start_epoch) * 0.8):
                 if AUGMENT:
                     print("🔄 Switching to no augmentation")
 
                     train_dataset.transforms = get_val_transform(imgsz=IMGSZ)
+                    visualize_labels(train_loader, epoch, num_images=4,
+                                 save_path="train_labels", SAVE_PATH=SAVE_PATH)
 
             for batch_idx, (images, targets) in enumerate(tqdm(train_loader, desc="Training")):
                 images = [img.to(DEVICE) for img in images]
