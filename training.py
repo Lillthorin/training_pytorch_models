@@ -7,6 +7,5 @@ from scripts.train_mask import train as train_masked
 "Load model with pretrained backbone or without, set PRETRAINED_BACKBONE to False" "DEFAULT == True"
 "Auto Augmentation AUGMENT = True, if you want to train without augmentation set to false" "DEFAULT == True"
 
-train(DATA_DIR="", MODEL_NAME='ssd_mobilenetv3', BATCH_SIZE=4, EPOCHS=50, NUM_CLASSES=2, IMGSZ=640)
-# train_masked(DATA_DIR="new_dataset", NUM_CLASSES=5, BATCH_SIZE=2,
-# EPOCHS=10, LR=0.001, PRETRAINED_BACKBONE=True, SCHEDULER_NAME='cosine', OPTIMIZER_NAME='adamw', CONTINUE_TRAINING=True, CHECKPOINT_PATH=r'C:\Users\Thori\OneDrive\Desktop\Pytorch segmentering och ssd\testa_maskrcnn\runs\maskrcnn_resnet50\1\checkpoint_best_mask.pth')
+train(DATA_DIR="", MODEL_NAME='ssd_mobilenetv3', BATCH_SIZE=4, EPOCHS=50, NUM_CLASSES=2, IMGSZ=320)
+train_masked(DATA_DIR="t", NUM_CLASSES=2, BATCH_SIZE=4, EPOCHS=50, IMGSZ=640)
