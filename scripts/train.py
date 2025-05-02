@@ -28,7 +28,7 @@ import numpy as np
 from scripts.utils import get_optimizer, get_scheduler
 
 
-def train(DATA_DIR, MODEL_NAME, BATCH_SIZE, EPOCHS, NUM_CLASSES, IMGSZ=640, LR=0.0001, AUGMENT=True, OPTIMIZER_NAME='adamw', PRETRAINED=True, PRETRAINED_BACKBONE=True, SCHEDULER_NAME='reduceonplateau', PATIENCE=1, RESUME_TRAINING=False, CHECKPOINT_PATH='', EXPORT_TORCHSCRIPT=False, WARMUP_EPOCHS=3):
+def train(DATA_DIR, MODEL_NAME,  EPOCHS, NUM_CLASSES, BATCH_SIZE=4, IMGSZ=640, LR=0.001, AUGMENT=True, OPTIMIZER_NAME='adamw' , PRETRAINED_BACKBONE=True, SCHEDULER_NAME='reduceonplateau', PATIENCE=10, RESUME_TRAINING=False, CHECKPOINT_PATH='', EXPORT_TORCHSCRIPT=False, WARMUP_EPOCHS=3):
     # === Konfig ===
     DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     DATA_DIR = DATA_DIR

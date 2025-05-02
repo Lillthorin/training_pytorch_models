@@ -30,22 +30,15 @@ def get_train_transform(imgsz):
         A.Resize(imgsz, imgsz, p=1),
         A.Normalize(mean=(0.485, 0.456, 0.406),
                     std=(0.229, 0.224, 0.225)),
-        
-        
         ToTensorV2()
     ],
-    bbox_params=A.BboxParams(
+        bbox_params=A.BboxParams(
         format='pascal_voc',
-        min_visibility=0.3,
         label_fields=['class_labels'],
+        min_visibility=0.3,
         clip=True,
         filter_invalid_bboxes=True
-    ),
-    is_check_shapes=True,
-    p=1.0
-    )
-
-
+    ))
 
 
 def get_weak_train_transform(imgsz):
@@ -57,16 +50,13 @@ def get_weak_train_transform(imgsz):
         A.Resize(imgsz, imgsz, p=1),
         ToTensorV2()
     ],
-     bbox_params=A.BboxParams(
+        bbox_params=A.BboxParams(
         format='pascal_voc',
-        min_visibility=0.3,
         label_fields=['class_labels'],
+        min_visibility=0.3,
         clip=True,
         filter_invalid_bboxes=True
-    ),
-    is_check_shapes=True,
-    p=1.0
-    )
+    ))
 
 
 def get_val_transform(imgsz):
@@ -76,16 +66,13 @@ def get_val_transform(imgsz):
         A.Resize(imgsz, imgsz, p=1),
         ToTensorV2()
     ],
-     bbox_params=A.BboxParams(
+        bbox_params=A.BboxParams(
         format='pascal_voc',
-        min_visibility=0.3,
         label_fields=['class_labels'],
+        min_visibility=0.3,
         clip=True,
         filter_invalid_bboxes=True
-    ),
-    is_check_shapes=True,
-    p=1.0
-    )
+    ))
 
 
 class CocoDataset(Dataset):
@@ -107,22 +94,34 @@ class CocoDataset(Dataset):
         boxes = []
         labels = []
         masks = []
+
         for ann in anns:
             if 'segmentation' not in ann or not ann['segmentation']:
                 continue
             x, y, w, h = ann['bbox']
             boxes.append([x, y, x + w, y + h])
             labels.append(ann['category_id'])
-            masks.append(coco.annToMask(ann))
+            masks.append(coco.annToMask(ann).astype(np.uint8))
 
-        if len(boxes) == 0:
+        # Hoppa över bilder utan giltig data
+        if len(boxes) == 0 or len(masks) == 0:
             return self.__getitem__((index + 1) % len(self))
 
+        # Transformera
         if self.transforms:
-            transformed = self.transforms(image=img)
+            transformed = self.transforms(
+                image=img,
+                masks=masks,
+                bboxes=boxes,
+                class_labels=labels
+            )
             img = transformed['image']
+            masks = transformed['masks']
+            boxes = transformed['bboxes']
+            labels = transformed['class_labels']
         else:
-            img = ToTensorV2()(image=img)['image']
+            transformed = ToTensorV2()(image=img)
+            img = transformed['image']
 
         boxes = torch.as_tensor(boxes, dtype=torch.float32)
         labels = torch.as_tensor(labels, dtype=torch.int64)

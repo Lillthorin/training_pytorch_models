@@ -8,8 +8,7 @@ from torchvision.models.detection.mask_rcnn import ResNet50_Weights
 from tqdm import tqdm
 import matplotlib.pyplot as plt
 
-from scripts.dataset import CocoDataset
-from scripts.augment import get_train_transform, get_val_transform, get_weak_train_transform
+from scripts.dataset import CocoDataset, get_train_transform, get_val_transform, get_weak_train_transform
 from scripts.utils_masked import EarlyStopping, visualize_predictions, visualize_labels, plot_metrics, validate
 from scripts.utils import get_optimizer, get_scheduler
 
@@ -46,7 +45,7 @@ def train(
         RESUME_TRAINING=False,
         CHECKPOINT_PATH='',
         WARMUP_EPOCHS=3,
-        IMGSZ = 640, AUGMENT=True):
+        IMGSZ=640, AUGMENT=True):
     MAIN_FOLDER = os.path.join('runs', MODEL_NAME)
     DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     os.makedirs(MAIN_FOLDER, exist_ok=True)
@@ -67,9 +66,9 @@ def train(
 
     train_dataset = CocoDataset(
         root=f"{DATA_DIR}/train", annFile=f"{DATA_DIR}/annotations/train.json", transforms=get_train_transform(imgsz=IMGSZ) if AUGMENT else get_val_transform(imgsz=IMGSZ)
-        )
+    )
     val_dataset = CocoDataset(
-        root=f"{DATA_DIR}/valid", annFile=f"{DATA_DIR}/annotations/valid.json", transforms= get_val_transform(imgsz=IMGSZ))
+        root=f"{DATA_DIR}/valid", annFile=f"{DATA_DIR}/annotations/valid.json", transforms=get_val_transform(imgsz=IMGSZ))
 
     train_loader = DataLoader(train_dataset, batch_size=BATCH_SIZE,
                               shuffle=True, collate_fn=lambda x: tuple(zip(*x)))
@@ -111,7 +110,8 @@ def train(
             if epoch + 1 == int((EPOCHS + start_epoch) * 0.5):
                 if AUGMENT:
                     print("🔄 Switching to weak augmentation")
-                    train_dataset.transforms = get_weak_train_transform(imgsz=IMGSZ)
+                    train_dataset.transforms = get_weak_train_transform(
+                        imgsz=IMGSZ)
             elif epoch + 1 == int((EPOCHS + start_epoch) * 0.8):
                 if AUGMENT:
                     print("🔄 Switching to no augmentation")
@@ -192,27 +192,28 @@ def train(
             })
 
             if early_stopping.counter == int(early_stopping.patience * 0.5) and not reduced_augmentation and not AUGMENT:
-                    print("🧪 Early stopping trigger reducing augmentation!")
-                    train_dataset.transforms = get_weak_train_transform(
-                        imgsz=IMGSZ)
-                    reduced_augmentation = True
-                    visualize_labels(train_loader, epoch, num_images=4,
-                                     save_path="train_labels", SAVE_PATH=SAVE_PATH)
-                    visualize_labels(train_loader, epoch+1, num_images=4,
-                                     save_path="train_labels", SAVE_PATH=SAVE_PATH)
+                print("🧪 Early stopping trigger reducing augmentation!")
+                train_dataset.transforms = get_weak_train_transform(
+                    imgsz=IMGSZ)
+                reduced_augmentation = True
+                visualize_labels(train_loader, epoch, num_images=4,
+                                 save_path="train_labels", SAVE_PATH=SAVE_PATH)
+                visualize_labels(train_loader, epoch+1, num_images=4,
+                                 save_path="train_labels", SAVE_PATH=SAVE_PATH)
 
             elif early_stopping.counter == int(early_stopping.patience * 0.8) and not no_augmentation and not AUGMENT:
-                    print(
-                        "🧪 Early stopping is about to trigger! Turning off Augmentation for finetune.")
-                    train_dataset.transforms = get_val_transform(imgsz=IMGSZ)
-                    no_augmentation = True
-                    visualize_labels(train_loader, epoch, num_images=4,
-                                     save_path="train_labels", SAVE_PATH=SAVE_PATH)
-                    visualize_labels(train_loader, epoch+1, num_images=4,
-                                     save_path="train_labels", SAVE_PATH=SAVE_PATH)
+                print(
+                    "🧪 Early stopping is about to trigger! Turning off Augmentation for finetune.")
+                train_dataset.transforms = get_val_transform(imgsz=IMGSZ)
+                no_augmentation = True
+                visualize_labels(train_loader, epoch, num_images=4,
+                                 save_path="train_labels", SAVE_PATH=SAVE_PATH)
+                visualize_labels(train_loader, epoch+1, num_images=4,
+                                 save_path="train_labels", SAVE_PATH=SAVE_PATH)
 
             if early_stopping.early_stop:
-                print(f"⏹️ Early stopp, mAP has not increased in {PATIENCE} epochs.")
+                print(
+                    f"⏹️ Early stopp, mAP has not increased in {PATIENCE} epochs.")
                 break
     except KeyboardInterrupt:
         print("Training aborted by user")
