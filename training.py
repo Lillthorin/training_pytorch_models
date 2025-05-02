@@ -1,7 +1,7 @@
 from scripts.train import train
 from scripts.train_mask import train as train_masked
 
-"Supported models: ssd_mobilenetv3, fasterrcnn_resnet50, 'fasterrcnn_mobile_320, fasterrcnn_mobile 'retinanet' "
+"Supported models: ssd_mobilenetv3, fasterrcnn_resnet50, 'fasterrcnn_mobile_320, fasterrcnn_mobile 'retinanet_resnet50_fpn_v2' "
 "Supported schedulers: steplr, cosine, onecycle, reduceonplateau(mAP)" "DEFAULT == reduceonplateau "
 "Supported optimizer: sgd, adam, adamw" "DEFAULT == adamw "
 "Load model with pretrained backbone or without, set PRETRAINED_BACKBONE to False" "DEFAULT == True"
