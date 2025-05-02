@@ -47,25 +47,24 @@ categories":[{"id":0,"name":"bkgd","supercategory":"none"}, {"id":0,"name":"YOUR
 "Load model with pretrained backbone or without, set PRETRAINED_BACKBONE to False" "DEFAULT == True"
 "Auto Augmentation AUGMENT = True, if you want to train without augmentation set to false" "DEFAULT == True"
 
-train(
-    DATA_DIR: Any,
-    MODEL_NAME: Any,
-    BATCH_SIZE: Any,
-    EPOCHS: Any,
-    NUM_CLASSES: Any,
-    IMGSZ: int = 640,
-    LR: float = 0.0001,
-    AUGMENT: bool = True,
-    OPTIMIZER_NAME: str = 'adamw',
-    PRETRAINED: bool = True,
-    PRETRAINED_BACKBONE: bool = True,
-    SCHEDULER_NAME: str = 'reduceonplateau',
-    PATIENCE: int = 1,
-    RESUME_TRAINING: bool = False,
-    CHECKPOINT_PATH: str = '',
-    EXPORT_TORCHSCRIPT: bool = False,
+
+    DATA_DIR: Any   <---- Path to your dataset, must be entered
+    MODEL_NAME: Any   < --- choose model (valid inputs: ssd_mobilenetv3, fasterrcnn_resnet50, 'fasterrcnn_mobile_320, fasterrcnn_mobile 'retinanet')
+    EPOCHS: Any    <---- How many epochs to train 
+    NUM_CLASSES: Any  <------ Your number of classes +1 
+    BATCH_SIZE = 4  <---- Default set to 4, increase if your gpu can handle it.
+    IMGSZ: int = 640  <----- In this training setup the image size is fixed. Please set your desired image size. DEFAULT is 640
+    LR: float = 0.001    <---- Learning rate experiment with this as you please. 
+    AUGMENT: bool = True  <---- Aumentation is applied automatically, set to false to not apply augmentation. Augmentation is applied in 3 stages HEAVY, LOW, NO 
+    OPTIMIZER_NAME: str = 'adamw' <---- Supported optimizer: sgd, adam, adamw: DEFAULT == adamw
+    PRETRAINED_BACKBONE: bool = True <--- This applies a pretrained backbone to the model, if changed you are on your own. 
+    SCHEDULER_NAME: str = 'reduceonplateau' <---Supported schedulers: steplr, cosine, onecycle, reduceonplateau(mAP)" "DEFAULT == reduceonplateau
+    PATIENCE: int = 10
+    RESUME_TRAINING: bool = False
+    CHECKPOINT_PATH: str = ''
+    EXPORT_TORCHSCRIPT: bool = False
     WARMUP_EPOCHS: int = 3
-    )
+    
 
 ### Dataset structure
 This training example uses coco.json annotation files to train the models. 
