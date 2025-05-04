@@ -14,11 +14,12 @@ from pycocotools.cocoeval import COCOeval
 import json
 import random
 from torchvision.transforms import functional as F
+from torchvision.ops import box_iou
 import math
 from tqdm import tqdm
 from torchvision.utils import draw_segmentation_masks, draw_bounding_boxes
 from torchvision.transforms.functional import to_pil_image
-
+from pycocotools import mask as maskUtils
 import torchvision
 
 
@@ -153,7 +154,7 @@ def visualize_labels(train_loader, epoch, SAVE_PATH, num_images=4, save_path="tr
                 mask = masks[m][0] if masks[m].dim() == 3 else masks[m]
                 mask = mask.numpy()
                 colored_mask = np.zeros((*mask.shape, 4))
-                colored_mask[mask > 0.5] = (0, 1, 0, 0.4)  # Grön med alpha
+                colored_mask[mask > 0.5] = (1, 0, 0, 0.2)  # Grön med alpha
                 axs[i].imshow(colored_mask)
 
         # Rita boxar och klass-ID
@@ -233,7 +234,7 @@ def visualize_predictions(model, val_loader, epoch, SAVE_PATH, device, num_image
                     axs[i].text(
                         x1, y1 - 5, f"{score:.2f}",
                         fontsize=12, color=color,
-                        bbox=dict(facecolor='white', alpha=0.5,
+                        bbox=dict(facecolor='white', alpha=0.3,
                                   edgecolor='none', boxstyle='round,pad=0.2'))
 
             # Rita maskerna om de finns
@@ -246,9 +247,9 @@ def visualize_predictions(model, val_loader, epoch, SAVE_PATH, device, num_image
                     mask = mask.numpy()
                     colored_mask = np.zeros((*mask.shape, 4))
                     if title_prefix == "Labels":
-                        colored_mask[mask > 0.5] = (0, 1, 0, 0.4)  # grön
+                        colored_mask[mask > 0.5] = (0, 1, 0, 0.2)  # grön
                     else:
-                        colored_mask[mask > 0.5] = (1, 0, 0, 0.4)  # röd
+                        colored_mask[mask > 0.5] = (1, 0, 0, 0.2)  # röd
                     axs[i].imshow(colored_mask)
 
         for j in range(num_images, len(axs)):
@@ -267,6 +268,97 @@ def visualize_predictions(model, val_loader, epoch, SAVE_PATH, device, num_image
 previous_bbox_score = 0
 
 
+def validate_test(model, val_loader, epoch, SAVE_PATH, device, NUM_CLASSES):
+    # TEST"""
+    global previous_bbox_score
+    os.makedirs(SAVE_PATH, exist_ok=True)
+    model.eval()
+    coco_gt = val_loader.dataset.coco
+    results = []
+    image_ids = []
+
+    # Mappa klassindex till COCO category_id
+    id_map = {i: c['id'] for i, c in enumerate(coco_gt.dataset['categories'])}
+
+    with torch.no_grad():
+        pbar = tqdm(val_loader, desc="Validating", ncols=120)
+        for images, targets in pbar:
+            images = [img.to(device) for img in images]
+            outputs = model(images)
+
+            for output, target in zip(outputs, targets):
+                boxes = output["boxes"].cpu()
+                scores = output["scores"].cpu()
+                labels_pred = output["labels"].cpu()
+                masks_pred = (output["masks"].cpu().sigmoid() > 0.5).squeeze(
+                    1)
+                # shape: [N, H, W] # binarize mask
+                image_id = int(target["image_id"].item())
+                image_ids.append(image_id)
+                print(image_id)
+                print(coco_gt.loadImgs(image_id))
+
+                for box, score, label, mask in zip(boxes, scores, labels_pred, masks_pred):
+                    x_min, y_min, x_max, y_max = box.tolist()
+                    width = x_max - x_min
+                    height = y_max - y_min
+
+                    # Konvertera binär mask till RLE
+                    rle = maskUtils.encode(np.asfortranarray(
+                        mask.numpy().astype(np.uint8)))
+                    if isinstance(rle, list):
+                        rle = rle[0]
+                    rle["counts"] = rle["counts"].decode("utf-8")
+
+                    result = {
+                        "image_id": image_id,
+                        "category_id": id_map[int(label)],
+                        "bbox": [x_min, y_min, width, height],
+                        "score": float(score),
+                        "segmentation": rle
+                    }
+
+                    if epoch == 0 and len(results) < 5:
+                        print(json.dumps(result, indent=2))
+
+                    results.append(result)
+
+    if len(results) == 0:
+        return 0.0, 0.0
+
+    result_path = os.path.join(
+        SAVE_PATH, f"val_results_epoch_{epoch:03d}.json")
+    with open(result_path, "w") as f:
+        json.dump(results, f, indent=4)
+
+    with contextlib.redirect_stdout(io.StringIO()):
+        coco_dt = coco_gt.loadRes(result_path)
+
+        # Eval for both 'segm' and 'bbox'
+        for iou_type in ['bbox', 'segm']:
+            print(f"\n=== Evaluating {iou_type} ===")
+            coco_eval = COCOeval(coco_gt, coco_dt, iouType=iou_type)
+            coco_eval.params.imgIds = image_ids
+            coco_eval.evaluate()
+            coco_eval.accumulate()
+            coco_eval.summarize()
+
+    os.remove(result_path)
+    return coco_eval.stats[0], coco_eval.stats[1]
+
+
+def calculate_mask_iou(gt_masks, pred_masks):
+    ious = []
+    for gt in gt_masks:
+        for pred in pred_masks:
+            intersection = np.logical_and(gt, pred).sum()
+            union = np.logical_or(gt, pred).sum()
+            if union == 0:
+                continue
+            ious.append(intersection / union)
+    return ious
+
+
 def validate(model, val_loader, epoch, SAVE_PATH, device, NUM_CLASSES):
     global previous_bbox_score
     model.eval()
@@ -275,38 +367,65 @@ def validate(model, val_loader, epoch, SAVE_PATH, device, NUM_CLASSES):
     image_ids = []
     all_targets, all_preds = [], []
 
+    # Mappa klassindex till COCO category_id
+    id_map = {i: c['id'] for i, c in enumerate(coco_gt.dataset['categories'])}
+
     with torch.no_grad():
         pbar = tqdm(val_loader, desc="Validating", ncols=120)
         for images, targets in pbar:
             images = [img.to(device) for img in images]
             outputs = model(images)
 
+            # (valfritt) samling för confusion matrix
             matched_targets, matched_preds = match_predictions_to_targets(
                 targets, outputs)
             all_targets.extend(matched_targets)
             all_preds.extend(matched_preds)
 
             for output, target in zip(outputs, targets):
+                assert target["masks"].shape[-2:] == output["masks"].shape[-2:], "Mismatch i mask-dimensioner!"
                 boxes = output["boxes"].cpu()
                 scores = output["scores"].cpu()
                 labels_pred = output["labels"].cpu()
+                masks_pred = (output["masks"].cpu().sigmoid() > 0.5).squeeze(
+                    1)
                 image_id = int(target["image_id"].item())
                 image_ids.append(image_id)
 
-                for box, score, label in zip(boxes, scores, labels_pred):
+                for box, score, label, mask in zip(boxes, scores, labels_pred, masks_pred):
                     x_min, y_min, x_max, y_max = box.tolist()
                     width = x_max - x_min
                     height = y_max - y_min
+
+                    # Konvertera mask till RLE (pycocotools-style)
+                    rle = maskUtils.encode(np.asfortranarray(
+                        mask.numpy().astype(np.uint8)))
+                    if isinstance(rle, list):  # vanligt vid 1 mask
+                        rle = rle[0]
+                    rle["counts"] = rle["counts"].decode("utf-8")
+
                     result = {
                         "image_id": image_id,
-                        "category_id": int(label),
+                        "category_id": id_map[int(label)],
                         "bbox": [x_min, y_min, width, height],
-                        "score": float(score)
+                        "score": float(score),
+                        "segmentation": rle
                     }
                     results.append(result)
-
-    if len(results) == 0:
-        return 0.0, 0.0
+    # Bonus: Mask IoU test (debug only)
+        # Direkt mask IoU-analys efter hela valideringsloopen
+        maskious = []
+        for output, target in zip(outputs, targets):
+            pred_masks = output.get(
+                "masks", torch.zeros(0, 1, 1)).cpu().numpy()
+            gt_masks = target.get("masks", torch.zeros(0, 1, 1)).cpu().numpy()
+            if len(pred_masks) == 0 or len(gt_masks) == 0:
+                continue
+            pred_masks_bin = (pred_masks > 0.5).astype(np.uint8)
+            ious = calculate_mask_iou(gt_masks, pred_masks_bin)
+            maskious.extend(ious)
+        if len(result) == 0:
+            return 0.0, 0.0, maskious
 
     result_path = os.path.join(
         SAVE_PATH, f"val_results_epoch_{epoch:03d}.json")
@@ -324,12 +443,14 @@ def validate(model, val_loader, epoch, SAVE_PATH, device, NUM_CLASSES):
         if coco_eval.stats[1] > previous_bbox_score:
             previous_bbox_score = coco_eval.stats[1]
             class_names = [str(i) for i in range(NUM_CLASSES)]
-            create_confusion_matrix(all_targets, all_preds, class_names,
-                                    filename=f"confusion_matrix_best.png", save_path=SAVE_PATH)
+            create_confusion_matrix(
+                all_targets, all_preds, class_names,
+                filename=f"confusion_matrix_best.png",
+                save_path=SAVE_PATH
+            )
 
     os.remove(result_path)
-    torch.cuda.empty_cache()
-    return coco_eval.stats[0], coco_eval.stats[1]
+    return coco_eval.stats[0], coco_eval.stats[1], maskious
 
 
 def plot_metrics(df, SAVE_PATH):

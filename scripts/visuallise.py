@@ -15,6 +15,7 @@ import io
 import random
 from matplotlib.patches import Rectangle
 
+
 def create_confusion_matrix(targets, preds, class_names, SAVE_PATH, filename="confusion_matrix.png", title="Confusion Matrix", ):
     save_dir = os.path.join(SAVE_PATH, 'confusion_matrices')
     os.makedirs(save_dir, exist_ok=True)
@@ -23,8 +24,6 @@ def create_confusion_matrix(targets, preds, class_names, SAVE_PATH, filename="co
     row_sums = cm.sum(axis=1, keepdims=True)
     row_sums[row_sums == 0] = 1  # förhindra division med 0
     cm_normalized = cm.astype('float') / row_sums
-
-    
 
     fig, ax = plt.subplots(figsize=(10, 8))
     sns.heatmap(
@@ -47,9 +46,7 @@ def create_confusion_matrix(targets, preds, class_names, SAVE_PATH, filename="co
     plt.close()
 
 
-
-
-def match_predictions_to_targets(targets, outputs, iou_threshold=0.5):
+def match_predictions_to_targets(targets, outputs, iou_threshold=0.5, id_map=None):
     matched_targets = []
     matched_preds = []
 
@@ -71,8 +68,12 @@ def match_predictions_to_targets(targets, outputs, iou_threshold=0.5):
             best_iou, best_p_idx = iou_row.max(0)
 
             if best_iou >= iou_threshold:
-                matched_targets.append(t_labels[t_idx].item())
-                matched_preds.append(p_labels[best_p_idx].item())
+                gt_label = t_labels[t_idx].item()
+                pred_label = p_labels[best_p_idx].item()
+                if id_map:
+                    pred_label = id_map[pred_label]
+                matched_targets.append(gt_label)
+                matched_preds.append(pred_label)
 
     return matched_targets, matched_preds
 
@@ -82,11 +83,15 @@ all_preds = []
 
 
 def validate(model, val_loader, epoch, DEVICE, SAVE_PATH, prev_loss, start_epoch, EPOCHS, NUM_CLASSES):
-   
+    global all_targets, all_preds
+    all_targets = []
+    all_preds = []
     model.eval()
     coco_gt = val_loader.dataset.coco
     results = []
     image_ids = []
+
+    id_map = {i: c['id'] for i, c in enumerate(coco_gt.dataset['categories'])}
 
     with torch.no_grad():
         for images, targets in tqdm(val_loader, desc="Validering"):
@@ -96,8 +101,7 @@ def validate(model, val_loader, epoch, DEVICE, SAVE_PATH, prev_loss, start_epoch
             for output, target in zip(outputs, targets):
                 boxes = output["boxes"].cpu()
                 scores = output["scores"].cpu()
-                labels_pred = output["labels"].cpu()  # <-- Lägg till pred
-                labels_gt = target["labels"].cpu()    # <-- Lägg till gt
+                labels_pred = output["labels"].cpu()
                 image_id = int(target["image_id"].item())
                 image_ids.append(image_id)
 
@@ -107,15 +111,16 @@ def validate(model, val_loader, epoch, DEVICE, SAVE_PATH, prev_loss, start_epoch
                     height = y_max - y_min
                     result = {
                         "image_id": image_id,
-                        "category_id": int(label),
+                        "category_id": int(id_map[int(label)]),  # 🔁 FIX HÄR
                         "bbox": [x_min, y_min, width, height],
                         "score": float(score)
                     }
+
                     results.append(result)
 
                 # === 🧠 Samla alla ground truths och predictions === #
                 matched_targets, matched_preds = match_predictions_to_targets(
-                    targets, outputs)
+                    targets, outputs, id_map=id_map)
                 all_targets.extend(matched_targets)
                 all_preds.extend(matched_preds)
 
@@ -155,7 +160,7 @@ def validate(model, val_loader, epoch, DEVICE, SAVE_PATH, prev_loss, start_epoch
                                 filename=f"confusion_matrix_best.png", title=f"Confusion Matrix Epoch {epoch+1}", SAVE_PATH=SAVE_PATH)
 
     os.remove(result_path)
-    torch.cuda.empty_cache()
+
     return mAP, AP50, AP75, AP_small, AP_medium, AP_large
 
 
@@ -165,6 +170,7 @@ def denormalize(img_tensor):
     std = torch.tensor([0.229, 0.224, 0.225],
                        device=img_tensor.device).view(3, 1, 1)
     return img_tensor * std + mean
+
 
 def visualize_labels(train_loader, epoch, SAVE_PATH, num_images=4, save_path="train_labels"):
     save_dir = os.path.join(SAVE_PATH, save_path)
@@ -210,7 +216,8 @@ def visualize_labels(train_loader, epoch, SAVE_PATH, num_images=4, save_path="tr
                 (x1, y1), x2 - x1, y2 - y1,
                 edgecolor='blue', facecolor='none', linewidth=2
             ))
-            axs[i].text(x1, y1 - 5, f"ID {int(label)}", color="blue", fontsize=10)
+            axs[i].text(x1, y1 - 5, f"ID {int(label)}",
+                        color="blue", fontsize=10)
 
     # Stäng av överflödiga rutor
     for j in range(num_images, len(axs)):

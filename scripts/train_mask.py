@@ -8,9 +8,12 @@ from torchvision.models.detection.mask_rcnn import ResNet50_Weights
 from tqdm import tqdm
 import matplotlib.pyplot as plt
 
-from scripts.dataset import CocoDataset, get_train_transform, get_val_transform, get_weak_train_transform
+from scripts.dataset import CocoDataset
+from scripts.augment import get_train_transform, get_val_transform, get_weak_train_transform
 from scripts.utils_masked import EarlyStopping, visualize_predictions, visualize_labels, plot_metrics, validate
 from scripts.utils import get_optimizer, get_scheduler
+
+import numpy as np
 
 
 def get_model(num_classes, pretrained_backbone=True):
@@ -65,13 +68,20 @@ def train(
     CHECKPOINT_BEST_BBOX = os.path.join(SAVE_PATH, 'checkpoint_best_bbox.pth')
 
     train_dataset = CocoDataset(
-        root=f"{DATA_DIR}/train", annFile=f"{DATA_DIR}/annotations/train.json", transforms=get_train_transform(imgsz=IMGSZ) if AUGMENT else get_val_transform(imgsz=IMGSZ)
+        root=f"{DATA_DIR}/train",
+        annFile=f"{DATA_DIR}/annotations/train.json",
+        image_size=IMGSZ,
+        transforms=get_train_transform(
+            imgsz=IMGSZ) if AUGMENT else get_val_transform(imgsz=IMGSZ)
     )
     val_dataset = CocoDataset(
-        root=f"{DATA_DIR}/valid", annFile=f"{DATA_DIR}/annotations/valid.json", transforms=get_val_transform(imgsz=IMGSZ))
+        root=f"{DATA_DIR}/valid",
+        annFile=f"{DATA_DIR}/annotations/valid.json",
+        mosaic_prob=0.0,
+        transforms=get_val_transform(imgsz=IMGSZ))
 
     train_loader = DataLoader(train_dataset, batch_size=BATCH_SIZE,
-                              shuffle=True, collate_fn=lambda x: tuple(zip(*x)))
+                              shuffle=True, collate_fn=lambda x: tuple(zip(*x)), drop_last=True)
     val_loader = DataLoader(val_dataset, batch_size=BATCH_SIZE,
                             shuffle=False, collate_fn=lambda x: tuple(zip(*x)))
 
@@ -113,14 +123,14 @@ def train(
                     train_dataset.transforms = get_weak_train_transform(
                         imgsz=IMGSZ)
                     visualize_labels(train_loader, epoch, num_images=4,
-                                 save_path="train_labels", SAVE_PATH=SAVE_PATH)
+                                     save_path="train_labels", SAVE_PATH=SAVE_PATH)
             elif epoch + 1 == int((EPOCHS + start_epoch) * 0.8):
                 if AUGMENT:
                     print("🔄 Switching to no augmentation")
 
                     train_dataset.transforms = get_val_transform(imgsz=IMGSZ)
                     visualize_labels(train_loader, epoch, num_images=4,
-                                 save_path="train_labels", SAVE_PATH=SAVE_PATH)
+                                     save_path="train_labels", SAVE_PATH=SAVE_PATH)
 
             for batch_idx, (images, targets) in enumerate(tqdm(train_loader, desc="Training")):
                 images = [img.to(DEVICE) for img in images]
@@ -143,10 +153,12 @@ def train(
                 total_loss += losses.item()
 
             loss = total_loss / len(train_loader)
-            val_mAP_mask, val_mAP_bbox = validate(
+            val_mAP_mask, val_mAP_bbox, maskIoU = validate(
                 model, val_loader, epoch, SAVE_PATH, device=DEVICE, NUM_CLASSES=NUM_CLASSES)
             visualize_predictions(model, val_loader, epoch,
                                   SAVE_PATH, device=DEVICE)
+            print(
+                f"🧪 Train Loss: {loss:.4f} | mAP_bbox: {val_mAP_bbox:.4f} | mAP_seg: {val_mAP_mask:.4f} | Mask IoU Mean: {np.mean(maskIoU):.4f}")
 
             if SCHEDULER_NAME == 'reduceonplateau':
                 scheduler.step(val_mAP_mask)
@@ -192,7 +204,10 @@ def train(
                 'train_loss': loss,
                 'val_mAP_mask': val_mAP_mask,
                 'val_mAP_bbox': val_mAP_bbox,
-                'lr': optimizer.param_groups[0]['lr']
+                'lr': optimizer.param_groups[0]['lr'],
+                'Mask IoU_mean': np.mean(maskIoU),
+                'Mask IoU_median': np.median(maskIoU),
+                'Mask IoU_Max': np.max(maskIoU)
             })
 
             if early_stopping.counter == int(early_stopping.patience * 0.5) and not reduced_augmentation and not AUGMENT:

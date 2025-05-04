@@ -1,119 +1,59 @@
-import torch
-import albumentations as A
-from albumentations.pytorch.transforms import ToTensorV2
+
 
 from torch.utils.data import Dataset
 from pycocotools.coco import COCO
+from albumentations.pytorch import ToTensorV2
+import albumentations as A
 import numpy as np
 from PIL import Image
+import torch
 import os
-
-def get_train_transform(imgsz):
-    return A.Compose([
-        A.HorizontalFlip(p=0.5),
-        A.VerticalFlip(p=0.3),
-        A.RandomRotate90(p=0.5),
-        A.ShiftScaleRotate(
-            shift_limit=0.05,
-            scale_limit=0.2,
-            rotate_limit=45,
-            p=0.7,
-            border_mode=0
-        ),
-        A.RandomBrightnessContrast(p=0.5),
-        A.HueSaturationValue(p=0.5),
-        A.RGBShift(p=0.4),
-        A.GaussNoise(p=0.2),
-        A.MotionBlur(blur_limit=3, p=0.2),
-        A.Perspective(scale=(0.05, 0.1), p=0.2),
-        A.Resize(imgsz, imgsz, p=1),
-        A.Normalize(mean=(0.485, 0.456, 0.406),
-                    std=(0.229, 0.224, 0.225)),
-        
-        
-        ToTensorV2()
-    ],
-    bbox_params=A.BboxParams(
-        format='pascal_voc',
-        min_visibility=0.3,
-        label_fields=['class_labels'],
-        clip=True,
-        filter_invalid_bboxes=True
-    ),
-    is_check_shapes=True,
-    p=1.0
-    )
+import cv2
+import random
 
 
+import os
+import random
+import numpy as np
+import torch
+from torch.utils.data import Dataset
+from PIL import Image
+import cv2
+from pycocotools.coco import COCO
+from albumentations.pytorch import ToTensorV2
 
-
-def get_weak_train_transform(imgsz):
-    return A.Compose([
-        A.RandomBrightnessContrast(p=0.1),
-        A.ColorJitter(p=0.3),
-        A.Normalize(mean=(0.485, 0.456, 0.406),
-                    std=(0.229, 0.224, 0.225)),
-        A.Resize(imgsz, imgsz, p=1),
-        ToTensorV2()
-    ],
-     bbox_params=A.BboxParams(
-        format='pascal_voc',
-        min_visibility=0.3,
-        label_fields=['class_labels'],
-        clip=True,
-        filter_invalid_bboxes=True
-    ),
-    is_check_shapes=True,
-    p=1.0
-    )
-
-
-def get_val_transform(imgsz):
-    return A.Compose([
-        A.Normalize(mean=(0.485, 0.456, 0.406),
-                    std=(0.229, 0.224, 0.225)),
-        A.Resize(imgsz, imgsz, p=1),
-        ToTensorV2()
-    ],
-     bbox_params=A.BboxParams(
-        format='pascal_voc',
-        min_visibility=0.3,
-        label_fields=['class_labels'],
-        clip=True,
-        filter_invalid_bboxes=True
-    ),
-    is_check_shapes=True,
-    p=1.0
-    )
 
 class CocoDataset(Dataset):
-    def __init__(self, root, annFile, transforms=None, verbose=True):
+    def __init__(self, root, annFile, image_size, transforms=None, verbose=True):
         self.root = root
         self.coco = COCO(annFile)
         self.transforms = transforms
+        self.mosaic_prob = 0.25
+        self.image_size = int(image_size/2)
 
         self.ids = list(sorted(self.coco.imgs.keys()))
         self.valid_ids = self._validate_dataset(verbose=verbose)
 
-    def _validate_dataset(self, verbose=True):
-        valid_ids = []
-        missing_files = 0
-        empty_anns = 0
+        self.cat_id_to_index = {
+            cat['id']: idx for idx, cat in enumerate(self.coco.dataset['categories'])
+        }
 
+    def _validate_dataset(self, verbose=True):
+        valid_ids, missing_files, empty_anns = [], 0, 0
         for img_id in self.ids:
             img_info = self.coco.loadImgs(img_id)[0]
             img_path = os.path.join(self.root, img_info['file_name'])
 
-            # 1. Kontrollera om bildfilen finns
             if not os.path.isfile(img_path):
                 missing_files += 1
                 continue
 
-            # 2. Kontrollera att det finns minst en giltig bbox
             ann_ids = self.coco.getAnnIds(imgIds=img_id)
             anns = self.coco.loadAnns(ann_ids)
-            valid_bboxes = [ann for ann in anns if 'bbox' in ann and ann['bbox'] and ann['bbox'][2] > 0 and ann['bbox'][3] > 0]
-            if len(valid_bboxes) == 0:
+            valid_bboxes = [
+                ann for ann in anns if 'bbox' in ann and ann['bbox'][2] > 0 and ann['bbox'][3] > 0]
+
+            if not valid_bboxes:
                 empty_anns += 1
                 continue
 
@@ -124,32 +64,36 @@ class CocoDataset(Dataset):
             print(f"Total images in annotationfile: {len(self.ids)}")
             print(f"Approved images with bboxes: {len(valid_ids)}")
             print(f"Missing images: {missing_files}")
-            print(f"Picures without annotations: {empty_anns}")
+            print(f"Pictures without annotations: {empty_anns}")
 
         return valid_ids
 
     def __getitem__(self, index):
-        coco = self.coco
-        img_id = self.valid_ids[index]
-        ann_ids = coco.getAnnIds(imgIds=img_id)
-        anns = coco.loadAnns(ann_ids)
+        use_mosaic = random.random() < self.mosaic_prob and len(self.valid_ids) >= 4
+        return self._load_mosaic(index) if use_mosaic else self._load_regular(index)
 
-        path = coco.loadImgs(img_id)[0]['file_name']
+    def _load_regular(self, index):
+        img_info = self.coco.loadImgs(self.valid_ids[index])[0]
+        img_id = img_info["id"]
+        path = img_info["file_name"]
+
+        ann_ids = self.coco.getAnnIds(imgIds=img_id)
+        anns = self.coco.loadAnns(ann_ids)
+
         try:
-            img = np.array(Image.open(os.path.join(self.root, path)).convert("RGB"))
+            img = np.array(Image.open(os.path.join(
+                self.root, path)).convert("RGB"))
         except FileNotFoundError:
             return self.__getitem__((index + 1) % len(self))
 
-        boxes = []
-        labels = []
+        boxes, labels = [], []
         for ann in anns:
-            if 'bbox' not in ann or not ann['bbox']:
-                continue
             x, y, w, h = ann['bbox']
-            boxes.append([x, y, x + w, y + h])
-            labels.append(ann['category_id'])
+            x1, y1, x2, y2 = x, y, x + w, y + h
+            boxes.append([x1, y1, x2, y2])
+            labels.append(self.cat_id_to_index[ann['category_id']])
 
-        if len(boxes) == 0:
+        if not boxes:
             return self.__getitem__((index + 1) % len(self))
 
         if self.transforms:
@@ -159,18 +103,13 @@ class CocoDataset(Dataset):
                 class_labels=labels
             )
             img = transformed['image']
-            boxes = torch.as_tensor(transformed['bboxes'], dtype=torch.float32)
-            labels = torch.as_tensor([int(x) for x in transformed['class_labels']], dtype=torch.int64)
+            boxes = torch.tensor(transformed['bboxes'], dtype=torch.float32)
+            labels = torch.tensor(
+                transformed['class_labels'], dtype=torch.int64)
 
             _, h, w = img.shape
-            if boxes.numel() == 0:
-                return self.__getitem__((index + 1) % len(self))
-            if boxes.ndim == 1:
-                boxes = boxes.unsqueeze(0)
-
             boxes[:, 0::2] = boxes[:, 0::2].clamp(0, w)
             boxes[:, 1::2] = boxes[:, 1::2].clamp(0, h)
-
             keep = (boxes[:, 2] > boxes[:, 0]) & (boxes[:, 3] > boxes[:, 1])
             boxes = boxes[keep]
             labels = labels[keep]
@@ -179,16 +118,88 @@ class CocoDataset(Dataset):
                 return self.__getitem__((index + 1) % len(self))
         else:
             img = ToTensorV2()(image=img)['image']
-            boxes = torch.as_tensor(boxes, dtype=torch.float32)
-            labels = torch.as_tensor(labels, dtype=torch.int64)
+            boxes = torch.tensor(boxes, dtype=torch.float32)
+            labels = torch.tensor(labels, dtype=torch.int64)
 
         target = {
             "boxes": boxes,
             "labels": labels,
             "image_id": torch.tensor([img_id])
         }
-
         return img, target
+
+    def _load_mosaic(self, index):
+        indices = [index] + random.choices(range(len(self.valid_ids)), k=3)
+        ids = [self.valid_ids[i] for i in indices]
+        positions = [(0, 0), (0, 1), (1, 0), (1, 1)]
+
+        mosaic_img = np.full(
+            (self.image_size * 2, self.image_size * 2, 3), 114, dtype=np.uint8)
+        final_boxes, final_labels = [], []
+
+        for i, img_id in enumerate(ids):
+            img_info = self.coco.loadImgs(img_id)[0]
+            path = img_info['file_name']
+            ann_ids = self.coco.getAnnIds(imgIds=img_id)
+            anns = self.coco.loadAnns(ann_ids)
+
+            try:
+                img = np.array(Image.open(os.path.join(
+                    self.root, path)).convert("RGB"))
+            except FileNotFoundError:
+                continue
+
+            h, w = img.shape[:2]
+            img_resized = cv2.resize(img, (self.image_size, self.image_size))
+            scale_x, scale_y = self.image_size / w, self.image_size / h
+
+            offset_x = positions[i][1] * self.image_size
+            offset_y = positions[i][0] * self.image_size
+
+            mosaic_img[offset_y:offset_y + self.image_size,
+                       offset_x:offset_x + self.image_size] = img_resized
+
+            for ann in anns:
+                x, y, bw, bh = ann['bbox']
+                cls = self.cat_id_to_index[ann['category_id']]
+                x1 = x * scale_x + offset_x
+                y1 = y * scale_y + offset_y
+                x2 = (x + bw) * scale_x + offset_x
+                y2 = (y + bh) * scale_y + offset_y
+                final_boxes.append([x1, y1, x2, y2])
+                final_labels.append(cls)
+
+        if self.transforms:
+            transformed = self.transforms(
+                image=mosaic_img,
+                bboxes=final_boxes,
+                class_labels=final_labels
+            )
+            mosaic_img = transformed['image']
+            boxes = torch.tensor(transformed['bboxes'], dtype=torch.float32)
+            labels = torch.tensor(
+                transformed['class_labels'], dtype=torch.int64)
+
+            _, h, w = mosaic_img.shape
+            boxes[:, 0::2] = boxes[:, 0::2].clamp(0, w)
+            boxes[:, 1::2] = boxes[:, 1::2].clamp(0, h)
+            keep = (boxes[:, 2] > boxes[:, 0]) & (boxes[:, 3] > boxes[:, 1])
+            boxes = boxes[keep]
+            labels = labels[keep]
+
+            if boxes.numel() == 0:
+                return self._load_regular(index)
+        else:
+            mosaic_img = ToTensorV2()(image=mosaic_img)['image']
+            boxes = torch.tensor(final_boxes, dtype=torch.float32)
+            labels = torch.tensor(final_labels, dtype=torch.int64)
+
+        target = {
+            "boxes": boxes,
+            "labels": labels,
+            "image_id": torch.tensor([ids[0]])
+        }
+        return mosaic_img, target
 
     def __len__(self):
         return len(self.valid_ids)
