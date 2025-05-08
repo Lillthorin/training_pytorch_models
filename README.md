@@ -28,7 +28,7 @@ See [THIRD_PARTY_LICENSES.txt](./THIRD_PARTY_LICENSES.txt) for full details.
 ## How to train a modell
 
 ### To start a training session on any of the supported models for object detection:
-
+The image size is not fixed and the models support different kinds of image size, however the IMGSZ is used in the training dataloader, if not specified otherwise 640x640 will be used. 
 from scripts.train import train
   
 train(DATA_DIR="", MODEL_NAME='ssd_mobilenetv3', BATCH_SIZE=4, EPOCHS=50, NUM_CLASSES=2, IMGSZ=640)
