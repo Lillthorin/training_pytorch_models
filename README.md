@@ -99,7 +99,8 @@ Use this to track how your modell is doing:
 After the training has been completed a metrics grid will be created. THIS CHANGES BETWEEN maskrcnn model and others:
 
 
-![all_metrics_grid](https://github.com/user-attachments/assets/17e8ddc1-e3ea-47b4-878f-c5ed2ab6e091)
+![all_metrics_grid](https://github.com/user-attachments/assets/015b4e84-fa1a-4f34-a1a0-6593546e5041)
+
 
 
 A confusion matrix is created as well. In the example below maskrcnn was trained with 4 classes (NUM_CLASSES = 5):
