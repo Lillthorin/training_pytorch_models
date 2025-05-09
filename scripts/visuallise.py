@@ -91,7 +91,7 @@ def validate(model, val_loader, epoch, DEVICE, SAVE_PATH, prev_loss, start_epoch
     results = []
     image_ids = []
 
-    id_map = {i: c['id'] for i, c in enumerate(coco_gt.dataset['categories'])}
+    id_map = {v: k for k, v in val_loader.dataset.cat_id_to_index.items()}
 
     with torch.no_grad():
         for images, targets in tqdm(val_loader, desc="Validering"):

@@ -24,11 +24,11 @@ from albumentations.pytorch import ToTensorV2
 
 
 class CocoDataset(Dataset):
-    def __init__(self, root, annFile, image_size, transforms=None, verbose=True):
+    def __init__(self, root, annFile, image_size, transforms=None, verbose=True, mosaic_prob=0.25):
         self.root = root
         self.coco = COCO(annFile)
         self.transforms = transforms
-        self.mosaic_prob = 0.25
+        self.mosaic_prob = mosaic_prob
         self.image_size = int(image_size/2)
 
         self.ids = list(sorted(self.coco.imgs.keys()))
@@ -107,6 +107,9 @@ class CocoDataset(Dataset):
             labels = torch.tensor(
                 transformed['class_labels'], dtype=torch.int64)
 
+            if boxes.ndim != 2 or boxes.shape[0] == 0:
+
+                return self.__getitem__((index + 1) % len(self))
             _, h, w = img.shape
             boxes[:, 0::2] = boxes[:, 0::2].clamp(0, w)
             boxes[:, 1::2] = boxes[:, 1::2].clamp(0, h)
@@ -175,10 +178,16 @@ class CocoDataset(Dataset):
                 bboxes=final_boxes,
                 class_labels=final_labels
             )
+            if len(transformed['bboxes']) == 0:
+                return self.__getitem__((index + 1) % len(self))
+
             mosaic_img = transformed['image']
             boxes = torch.tensor(transformed['bboxes'], dtype=torch.float32)
             labels = torch.tensor(
                 transformed['class_labels'], dtype=torch.int64)
+
+            if boxes.ndim != 2 or boxes.shape[0] == 0:
+                return self.__getitem__((index + 1) % len(self))
 
             _, h, w = mosaic_img.shape
             boxes[:, 0::2] = boxes[:, 0::2].clamp(0, w)

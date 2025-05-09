@@ -61,7 +61,7 @@ def match_predictions_to_targets(targets, outputs, iou_threshold=0.5):
 
 
 class EarlyStopping:
-    def __init__(self, patience=10, min_delta=0.001):
+    def __init__(self, patience=20, min_delta=0.01):
         self.patience = patience
         self.min_delta = min_delta
         self.counter = 0
@@ -154,7 +154,7 @@ def visualize_labels(train_loader, epoch, SAVE_PATH, num_images=4, save_path="tr
                 mask = masks[m][0] if masks[m].dim() == 3 else masks[m]
                 mask = mask.numpy()
                 colored_mask = np.zeros((*mask.shape, 4))
-                colored_mask[mask > 0.5] = (1, 0, 0, 0.2)  # Grön med alpha
+                colored_mask[mask > 0.5] = (1, 0, 0, 0.4)  # Grön med alpha
                 axs[i].imshow(colored_mask)
 
         # Rita boxar och klass-ID
@@ -228,14 +228,22 @@ def visualize_predictions(model, val_loader, epoch, SAVE_PATH, device, num_image
                     edgecolor=color, facecolor='none', linewidth=2
                 ))
 
-                # Score-text vid predictions
+                # Hämta class id
+                class_id = box_source["labels"][j].item(
+                ) if "labels" in box_source else -1
+
+                # Text (score + class id)
+                text = f"ID:{class_id}"
                 if boxes_key == "scores":
                     score = box_source["scores"][j].item()
-                    axs[i].text(
-                        x1, y1 - 5, f"{score:.2f}",
-                        fontsize=12, color=color,
-                        bbox=dict(facecolor='white', alpha=0.3,
-                                  edgecolor='none', boxstyle='round,pad=0.2'))
+                    text += f", {score:.2f}"
+
+                axs[i].text(
+                    x1, y1 - 5, text,
+                    fontsize=12, color=color,
+                    bbox=dict(facecolor='white', alpha=0.3,
+                              edgecolor='none', boxstyle='round,pad=0.2')
+                )
 
             # Rita maskerna om de finns
             if "masks" in box_source:
@@ -247,9 +255,9 @@ def visualize_predictions(model, val_loader, epoch, SAVE_PATH, device, num_image
                     mask = mask.numpy()
                     colored_mask = np.zeros((*mask.shape, 4))
                     if title_prefix == "Labels":
-                        colored_mask[mask > 0.5] = (0, 1, 0, 0.2)  # grön
+                        colored_mask[mask > 0.5] = (1, 0, 0, 0.4)
                     else:
-                        colored_mask[mask > 0.5] = (1, 0, 0, 0.2)  # röd
+                        colored_mask[mask > 0.5] = (0, 0, 1, 0.4)
                     axs[i].imshow(colored_mask)
 
         for j in range(num_images, len(axs)):
@@ -376,7 +384,6 @@ def validate(model, val_loader, epoch, SAVE_PATH, device, NUM_CLASSES):
             images = [img.to(device) for img in images]
             outputs = model(images)
 
-            # (valfritt) samling för confusion matrix
             matched_targets, matched_preds = match_predictions_to_targets(
                 targets, outputs)
             all_targets.extend(matched_targets)
@@ -412,8 +419,7 @@ def validate(model, val_loader, epoch, SAVE_PATH, device, NUM_CLASSES):
                         "segmentation": rle
                     }
                     results.append(result)
-    # Bonus: Mask IoU test (debug only)
-        # Direkt mask IoU-analys efter hela valideringsloopen
+
         maskious = []
         for output, target in zip(outputs, targets):
             pred_masks = output.get(
@@ -448,8 +454,16 @@ def validate(model, val_loader, epoch, SAVE_PATH, device, NUM_CLASSES):
                 filename=f"confusion_matrix_best.png",
                 save_path=SAVE_PATH
             )
+        else:
+            class_names = [str(i) for i in range(NUM_CLASSES)]
+            create_confusion_matrix(
+                all_targets, all_preds, class_names,
+                filename=f"confusion_matrix_last.png",
+                save_path=SAVE_PATH
+            )
 
     os.remove(result_path)
+    torch.cuda.empty_cache()
     return coco_eval.stats[0], coco_eval.stats[1], maskious
 
 

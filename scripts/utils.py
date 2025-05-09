@@ -59,8 +59,8 @@ def get_optimizer(optimizer_name, model, learning_rate=1e-3, weight_decay=0.0, m
         raise ValueError(f"Unsupported optimizer: {optimizer_name}")
 
 
-def get_scheduler(optimizer, EPOCHS, scheduler_name='steplr', step_size=10, gamma=0.1, patience=5,
-                  max_lr=0.01, total_steps=100, warmup_steps=10,):
+def get_scheduler(optimizer, EPOCHS, scheduler_name='steplr', step_size=10, gamma=0.8, patience=3,
+                  max_lr=0.01, total_steps=100, warmup_steps=10, factor=0.5):
     """
     Returnerar en scheduler baserat på användarens val.
     """
@@ -83,9 +83,9 @@ def get_scheduler(optimizer, EPOCHS, scheduler_name='steplr', step_size=10, gamm
         return ReduceLROnPlateau(
             optimizer,
             mode='max',
-            factor=0.5,
+            factor=factor,
             patience=patience,
-            threshold=0.001,
+            threshold=0.01,
             min_lr=1e-6
         )
     else:

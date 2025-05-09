@@ -9,7 +9,7 @@ from tqdm import tqdm
 import matplotlib.pyplot as plt
 
 from scripts.dataset import CocoDataset
-from scripts.augment import get_train_transform, get_val_transform, get_weak_train_transform
+from scripts.augment import get_strong_transform, get_val_transform, get_weak_train_transform, get_middle_train_transform
 from scripts.utils_masked import EarlyStopping, visualize_predictions, visualize_labels, plot_metrics, validate
 from scripts.utils import get_optimizer, get_scheduler
 
@@ -48,7 +48,8 @@ def train(
         RESUME_TRAINING=False,
         CHECKPOINT_PATH='',
         WARMUP_EPOCHS=3,
-        IMGSZ=640, AUGMENT=True):
+        IMGSZ=640, AUGMENT=True,
+        EARLYSTOPPING_PATIENCE=10):
     MAIN_FOLDER = os.path.join('runs', MODEL_NAME)
     DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     os.makedirs(MAIN_FOLDER, exist_ok=True)
@@ -71,7 +72,7 @@ def train(
         root=f"{DATA_DIR}/train",
         annFile=f"{DATA_DIR}/annotations/train.json",
         image_size=IMGSZ,
-        transforms=get_train_transform(
+        transforms=get_strong_transform(
             imgsz=IMGSZ) if AUGMENT else get_val_transform(imgsz=IMGSZ)
     )
     val_dataset = CocoDataset(
@@ -89,8 +90,9 @@ def train(
     optimizer = get_optimizer(
         optimizer_name=OPTIMIZER_NAME, model=model, learning_rate=LR)
     scheduler = get_scheduler(
-        optimizer=optimizer, scheduler_name=SCHEDULER_NAME, EPOCHS=EPOCHS)
-    early_stopping = EarlyStopping(patience=PATIENCE, min_delta=0.001)
+        optimizer=optimizer, scheduler_name=SCHEDULER_NAME, EPOCHS=EPOCHS, patience=PATIENCE)
+    early_stopping = EarlyStopping(
+        patience=EARLYSTOPPING_PATIENCE, min_delta=0.001)
 
     start_epoch = 0
     if RESUME_TRAINING:
@@ -116,14 +118,23 @@ def train(
 
             if epoch == start_epoch or epoch == EPOCHS + start_epoch:
                 visualize_labels(train_loader, epoch, SAVE_PATH)
+                visualize_labels(train_loader, epoch+1, SAVE_PATH)
 
-            if epoch + 1 == int((EPOCHS + start_epoch) * 0.5):
+            if epoch + 1 == int((EPOCHS + start_epoch) * 0.3):
                 if AUGMENT:
-                    print("🔄 Switching to weak augmentation")
+                    print("🔄 Switching augmentation")
+                    train_dataset.transforms = get_middle_train_transform(
+                        imgsz=IMGSZ)
+                    visualize_labels(train_loader, epoch, num_images=4,
+                                     save_path="train_labels", SAVE_PATH=SAVE_PATH)
+            elif epoch + 1 == int((EPOCHS + start_epoch) * 0.5):
+                if AUGMENT:
+                    print("🔄 Switching augmentation")
                     train_dataset.transforms = get_weak_train_transform(
                         imgsz=IMGSZ)
                     visualize_labels(train_loader, epoch, num_images=4,
                                      save_path="train_labels", SAVE_PATH=SAVE_PATH)
+
             elif epoch + 1 == int((EPOCHS + start_epoch) * 0.8):
                 if AUGMENT:
                     print("🔄 Switching to no augmentation")
@@ -151,6 +162,8 @@ def train(
                         param_group['lr'] = warmup_lr
 
                 total_loss += losses.item()
+                if SCHEDULER_NAME == 'onecycle':
+                    scheduler.step()
 
             loss = total_loss / len(train_loader)
             val_mAP_mask, val_mAP_bbox, maskIoU = validate(
@@ -159,11 +172,13 @@ def train(
                                   SAVE_PATH, device=DEVICE)
             print(
                 f"🧪 Train Loss: {loss:.4f} | mAP_bbox: {val_mAP_bbox:.4f} | mAP_seg: {val_mAP_mask:.4f} | Mask IoU Mean: {np.mean(maskIoU):.4f}")
-
-            if SCHEDULER_NAME == 'reduceonplateau':
-                scheduler.step(val_mAP_mask)
-            else:
-                scheduler.step()
+            if global_step > warmup_iters:
+                if SCHEDULER_NAME == 'reduceonplateau':
+                    scheduler.step(loss)
+                    early_stopping(val_mAP_mask)
+                elif SCHEDULER_NAME != 'onecycle':
+                    scheduler.step()
+                    early_stopping(val_mAP_mask)
 
             torch.save(model.state_dict(), LAST)
             torch.save({
@@ -210,9 +225,9 @@ def train(
                 'Mask IoU_Max': np.max(maskIoU)
             })
 
-            if early_stopping.counter == int(early_stopping.patience * 0.5) and not reduced_augmentation and not AUGMENT:
+            if early_stopping.counter == int(early_stopping.patience * 0.5) and not reduced_augmentation and AUGMENT:
                 print("🧪 Early stopping trigger reducing augmentation!")
-                train_dataset.transforms = get_weak_train_transform(
+                train_dataset.transforms = get_middle_train_transform(
                     imgsz=IMGSZ)
                 reduced_augmentation = True
                 visualize_labels(train_loader, epoch, num_images=4,
@@ -220,7 +235,7 @@ def train(
                 visualize_labels(train_loader, epoch+1, num_images=4,
                                  save_path="train_labels", SAVE_PATH=SAVE_PATH)
 
-            elif early_stopping.counter == int(early_stopping.patience * 0.8) and not no_augmentation and not AUGMENT:
+            elif early_stopping.counter == int(early_stopping.patience * 0.8) and not no_augmentation and AUGMENT:
                 print(
                     "🧪 Early stopping is about to trigger! Turning off Augmentation for finetune.")
                 train_dataset.transforms = get_val_transform(imgsz=IMGSZ)
@@ -232,7 +247,7 @@ def train(
 
             if early_stopping.early_stop:
                 print(
-                    f"⏹️ Early stopp, mAP has not increased in {PATIENCE} epochs.")
+                    f"⏹️ Early stopp, mAP has not increased in {EARLYSTOPPING_PATIENCE} epochs.")
                 break
     except KeyboardInterrupt:
         print("Training aborted by user")

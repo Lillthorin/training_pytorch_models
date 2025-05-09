@@ -18,7 +18,7 @@ from torchvision.models.detection.faster_rcnn import ResNet50_Weights, MobileNet
 
 from torchvision.transforms import functional as F
 from scripts.data_set import CocoDataset
-from scripts.augment import get_val_transform, get_train_transform, get_weak_train_transform
+from scripts.augment import get_val_transform, get_strong_transform, get_weak_train_transform, get_middle_train_transform
 from scripts.visuallise import validate, visualize_labels, visualize_predictions
 from tqdm import tqdm
 import matplotlib.pyplot as plt
@@ -28,7 +28,7 @@ import numpy as np
 from scripts.utils import get_optimizer, get_scheduler
 
 
-def train(DATA_DIR, MODEL_NAME,  EPOCHS, NUM_CLASSES, BATCH_SIZE=4, IMGSZ=640, LR=0.001, AUGMENT=True, OPTIMIZER_NAME='adamw', PRETRAINED_BACKBONE=True, SCHEDULER_NAME='reduceonplateau', PATIENCE=10, RESUME_TRAINING=False, CHECKPOINT_PATH='', EXPORT_TORCHSCRIPT=False, WARMUP_EPOCHS=3):
+def train(DATA_DIR, MODEL_NAME,  EPOCHS, NUM_CLASSES, BATCH_SIZE=4, IMGSZ=640, LR=0.001, AUGMENT=True, OPTIMIZER_NAME='adamw', PRETRAINED_BACKBONE=True, SCHEDULER_NAME='reduceonplateau', PATIENCE=10, RESUME_TRAINING=False, CHECKPOINT_PATH='', EXPORT_TORCHSCRIPT=False, WARMUP_EPOCHS=3, EARLYSTOPPING_PATIENCE=10, FACTOR=0.5):
     # === Konfig ===
     DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     DATA_DIR = DATA_DIR
@@ -182,7 +182,8 @@ def train(DATA_DIR, MODEL_NAME,  EPOCHS, NUM_CLASSES, BATCH_SIZE=4, IMGSZ=640, L
                 root=f"{DATA_DIR}/train",
                 annFile=f"{DATA_DIR}/annotations/train.json",
                 image_size=IMGSZ,
-                transforms=(get_train_transform(
+                mosaic_prob=0.25,
+                transforms=(get_strong_transform(
                     imgsz=IMGSZ) if AUGMENT else get_val_transform(imgsz=IMGSZ))
             )
             print('Loading and checking valid dataset...')
@@ -190,6 +191,7 @@ def train(DATA_DIR, MODEL_NAME,  EPOCHS, NUM_CLASSES, BATCH_SIZE=4, IMGSZ=640, L
                 root=f"{DATA_DIR}/valid",
                 annFile=f"{DATA_DIR}/annotations/valid.json",
                 image_size=IMGSZ,
+                mosaic_prob=0.0,
                 transforms=get_val_transform(imgsz=IMGSZ)
             )
 
@@ -204,13 +206,18 @@ def train(DATA_DIR, MODEL_NAME,  EPOCHS, NUM_CLASSES, BATCH_SIZE=4, IMGSZ=640, L
             optimizer = get_optimizer(
                 optimizer_name=OPTIMIZER_NAME, model=model, learning_rate=LR)
 
-            early_stopping = EarlyStopping(patience=PATIENCE, min_delta=0.001)
+            early_stopping = EarlyStopping(
+                patience=EARLYSTOPPING_PATIENCE, min_delta=0.001)
             scheduler = get_scheduler(
-                optimizer=optimizer, scheduler_name=SCHEDULER_NAME, EPOCHS=start_epoch-1)
+                optimizer=optimizer, scheduler_name=SCHEDULER_NAME, EPOCHS=start_epoch-1, patience=PATIENCE, step_size=int(EPOCHS*0.1),
+                total_steps=int(EPOCHS * len(train_loader)), max_lr=LR, factor=FACTOR)
             if RESUME_TRAINING:
                 model, optimizer, start_epoch, scheduler_state = load_checkpoint(
                     model, optimizer, CHECKPOINT_PATH)
                 scheduler = get_scheduler(
+                    max_lr=LR,
+                    step_size=int(EPOCHS*0.1),
+                    total_steps=int(EPOCHS * len(train_loader)),
                     optimizer=optimizer,
                     scheduler_name=SCHEDULER_NAME,
                     EPOCHS=start_epoch  # 💥 viktigt!
@@ -238,11 +245,18 @@ def train(DATA_DIR, MODEL_NAME,  EPOCHS, NUM_CLASSES, BATCH_SIZE=4, IMGSZ=640, L
                 print(f"\n📦 Epoch {epoch + 1}/{EPOCHS + start_epoch}")
 
                 # === Stäng av augmentering i slutet ===
-                if epoch + 1 == int(EPOCHS+start_epoch * 0.5):
+                if epoch + 1 == int(EPOCHS+start_epoch * 0.3):
                     if AUGMENT:
-                        print("🔄 Changing augmentation state to low")
+                        print("🔄 Changing augmentation state to middle")
                         train_dataset.transforms = get_weak_train_transform(
                             imgsz=IMGSZ)
+                elif epoch + 1 == int((EPOCHS + start_epoch) * 0.5):
+                    if AUGMENT:
+                        print("🔄 Switching augmentation state to low")
+                        train_dataset.transforms = get_weak_train_transform(
+                            imgsz=IMGSZ)
+                        visualize_labels(train_loader, epoch, num_images=4,
+                                         save_path="train_labels", SAVE_PATH=SAVE_PATH)
                 if epoch + 1 == int(EPOCHS+start_epoch * 0.8):
                     if AUGMENT:
                         print("🔄 Chaning to no augmentation")
@@ -267,6 +281,8 @@ def train(DATA_DIR, MODEL_NAME,  EPOCHS, NUM_CLASSES, BATCH_SIZE=4, IMGSZ=640, L
                             global_step / warmup_iters
                         for param_group in optimizer.param_groups:
                             param_group['lr'] = warmup_lr
+                    if SCHEDULER_NAME == 'onecycle':
+                        scheduler.step()
 
                 loss = total_loss / len(train_loader)
 
@@ -334,7 +350,7 @@ def train(DATA_DIR, MODEL_NAME,  EPOCHS, NUM_CLASSES, BATCH_SIZE=4, IMGSZ=640, L
                 if early_stopping.counter == int(early_stopping.patience * 0.5) and not reduced_augmentation:
                     if AUGMENT:
                         print("🧪 Early stopping trigger reducing augmentation!")
-                        train_dataset.transforms = get_weak_train_transform(
+                        train_dataset.transforms = get_middle_train_transform(
                             imgsz=IMGSZ)
                         reduced_augmentation = True
                         visualize_labels(train_loader, epoch, num_images=4,
@@ -342,7 +358,7 @@ def train(DATA_DIR, MODEL_NAME,  EPOCHS, NUM_CLASSES, BATCH_SIZE=4, IMGSZ=640, L
                         visualize_labels(train_loader, epoch+1, num_images=4,
                                          save_path="train_labels", SAVE_PATH=SAVE_PATH)
 
-                elif early_stopping.counter == early_stopping.patience - 5 and not no_augmentation and AUGMENT:
+                elif early_stopping.counter == (int(early_stopping.patience*0.8)) and not no_augmentation and AUGMENT:
 
                     print(
                         "🧪 Early stopping is about to trigger! Turning off Augmentation for finetune.")
@@ -355,7 +371,7 @@ def train(DATA_DIR, MODEL_NAME,  EPOCHS, NUM_CLASSES, BATCH_SIZE=4, IMGSZ=640, L
 
                 if early_stopping.early_stop:
                     print(
-                        f"⏹️ Early stopp, mAP has not increased in {PATIENCE} epochs.")
+                        f"⏹️ Early stopp, mAP has not increased in {EARLYSTOPPING_PATIENCE} epochs.")
                     break
         except KeyboardInterrupt:
             print("Training aborted by user")
